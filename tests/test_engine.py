@@ -142,6 +142,50 @@ class EngineTests(unittest.TestCase):
         doc = base(deadline='25.04.2026') + '\n\nДата подписания: 05.03.2026.'
         self.assertEqual(analysis(doc).contracts[0].deadline.value, date(2026,4,25))
 
+    def test_written_amount_in_parentheses(self):
+        c = analysis('Договор № ZK-300\n\nПоставщик: ООО «Пример»\n\n'
+                     'Общая стоимость поставки составляет 1 200 000 (один миллион двести тысяч) рублей.')
+        self.assertEqual(c.contracts[0].amount.value, Decimal(1200000))
+
+    def test_separate_clauses_in_one_paragraph(self):
+        doc = ('Договор поставки ZK-300\n\nПоставщик: ООО «Пример»\n\n'
+               '2.1. Общая стоимость составляет 840 000 рублей.\n'
+               '2.2. Авансовый платеж составляет 252 000 рублей.\n\n'
+               '3.1. Срок поставки — до 20.03.2026.\n'
+               '3.2. Оплата оставшейся суммы — до 10.04.2026. Этот срок оплаты, а не поставки.')
+        c = analysis(doc).contracts[0]
+        self.assertEqual(c.amount.value, Decimal(840000))
+        self.assertEqual(c.deadline.value, date(2026,3,20))
+
+    def test_budget_limit_not_agreed_amount(self):
+        doc = ('Договор ZK-300\n\nПоставщик: ООО «Пример»\n\n'
+               '2.1. Общая стоимость определяется спецификацией, которой нет.\n'
+               '2.2. Лимит закупки по внутреннему бюджету — 600 000 рублей. '
+               'Этот лимит не является согласованной стоимостью.\n\n'
+               '3.1. Срок поставки — до 30.04.2026.')
+        self.assertIsNone(analysis(doc).contracts[0].amount)
+
+    def test_actual_six_documents(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[1] / 'documents'
+        docs = [(p.name, p.read_text(encoding='utf-8')) for p in sorted(root.glob('*.txt'))]
+        self.assertEqual(len(docs), 6)
+        a = analyse(docs, CHECK)
+        contracts = {c.contract_id: c for c in a.contracts}
+        self.assertEqual(contracts['STN-101'].amount.value, Decimal(1380000))
+        self.assertEqual(contracts['STN-101'].deadline.value, date(2026,4,30))
+        self.assertEqual(contracts['STN-102'].amount.value, Decimal(840000))
+        self.assertEqual(contracts['STN-102'].deadline.value, date(2026,3,20))
+        self.assertIsNone(contracts['STN-103'].amount)
+        self.assertEqual(contracts['STN-103'].deadline.value, date(2026,4,30))
+        self.assertEqual(len(contracts['STN-101'].applied_amendments), 1)
+        self.assertEqual(len(contracts['STN-101'].notices), 1)
+        self.assertEqual(len(contracts['STN-102'].notices), 1)
+        q4 = answer_early(a)
+        self.assertIn('STN-102 — 20.03.2026', q4.text)
+        self.assertIn('STN-101 — предложенный срок 10.05.2026', q4.text)
+        self.assertIn('STN-102 — предложенный срок 27.03.2026', q4.text)
+
     def test_money_format(self):
         self.assertEqual(money_text(Decimal('780000.50')), '780\u00a0000,50 ₽')
 
