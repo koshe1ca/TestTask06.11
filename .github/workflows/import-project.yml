@@ -3,7 +3,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'project-bundle.tar.xz'
+      - '.bundle/part05.txt'
   workflow_dispatch:
 permissions:
   contents: write
@@ -18,9 +18,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f project-bundle.tar.xz
-          tar -xJf project-bundle.tar.xz --strip-components=1
-          rm project-bundle.tar.xz
+          cat .bundle/part*.txt | base64 --decode > /tmp/semantic-textnavigator.tar.xz
+          tar -xJf /tmp/semantic-textnavigator.tar.xz --strip-components=1
+          rm -rf .bundle
           python3 -m unittest discover -s tests -v
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
