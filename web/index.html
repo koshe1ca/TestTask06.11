@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Semantic TextNavigator — Проверка договоров</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" aria-label="Панель исходных документов">
+    <div class="brand"><div class="brand-icon">S<span>·</span></div><div>SEMANTIC<span class="brand-sub">TEXTNAVIGATOR</span></div></div>
+    <div class="side-section">
+      <div class="section-overline">РАБОЧЕЕ ПРОСТРАНСТВО</div>
+      <h2>Источники данных</h2>
+      <p class="muted">Загрузите договоры и документы к ним в формате TXT.</p>
+      <label class="upload-area" for="fileInput"><span class="upload-icon">↑</span><b>Выбрать TXT-файлы</b><small>Несколько файлов одновременно</small></label>
+      <input type="file" accept=".txt,text/plain" multiple id="fileInput" hidden>
+      <button id="loadDemo" class="button button-outline button-full" type="button">▤ Открыть учебный комплект</button>
+      <button id="clearAll" class="plain-action" type="button">Очистить загрузку</button>
+    </div>
+    <div class="side-section">
+      <label for="checkDate" class="field-label">Дата проверки</label>
+      <input id="checkDate" class="date-input" type="date" value="2026-03-10">
+      <div class="rule"><span class="rule-icon">✓</span><span>Учитываются только подписанные обеими сторонами допсоглашения, вступившие в силу к дате проверки.</span></div>
+    </div>
+    <div class="side-section file-section">
+      <div class="file-header"><span class="field-label">Файлы</span><span id="fileCount" class="number-pill">0</span></div>
+      <div id="fileList" class="file-list"><p class="muted small">Файлы пока не выбраны.</p></div>
+    </div>
+    <div class="side-footer"><b>LOCAL FIRST</b><br>Без платного API и внешней отправки документов.<br>До 30 TXT по 2 МБ.</div>
+  </aside>
+  <main class="main">
+    <header class="header">
+      <div><div class="eyebrow">ПРОВЕРКА УСЛОВИЙ ПОСТАВКИ <span class="eyebrow-mark">/</span> ПРОТОТИП</div><h1>Договоры под контролем.</h1><p class="header-subtitle">Суммы, сроки и каждое основание — в одном месте.</p></div>
+      <div class="header-actions"><div id="modeLabel" class="mode-label">Нет данных</div><button id="downloadCsv" class="button button-outline" type="button" disabled>↓ Экспорт CSV</button></div>
+    </header>
+    <div id="toast" class="toast" role="alert" hidden></div>
+    <section id="emptyState" class="empty-state">
+      <div class="empty-symbol">▤</div><h2>Начните с исходных документов</h2>
+      <p>Добавьте несколько TXT-файлов или откройте учебный набор из шести документов: три договора, допсоглашение, письмо и проект изменения.</p>
+      <button id="demoCta" class="button button-primary" type="button">Открыть демонстрацию <span>→</span></button>
+      <div class="empty-features"><span>✓ Проверяемые цитаты</span><span>✓ Учет статуса</span><span>✓ Четыре ответа</span></div>
+    </section>
+    <div id="workspace" hidden>
+      <div class="metrics">
+        <div class="metric"><span>ДОГОВОРЫ</span><strong id="metricContracts">—</strong><small>Основных документов</small></div>
+        <div class="metric"><span>УЧТЕНО СОГЛАШЕНИЙ</span><strong id="metricApplied">—</strong><small>Вступивших в силу</small></div>
+        <div class="metric"><span>НЕПРИМЕНЕННЫЕ ИЗМЕНЕНИЯ</span><strong id="metricNotices">—</strong><small>Предложения и проекты</small></div>
+        <div class="metric"><span>НУЖНА ПРОВЕРКА</span><strong id="metricReview">—</strong><small>Договоры и файлы</small></div>
+      </div>
+      <div class="tabs" role="tablist" aria-label="Разделы приложения">
+        <button class="tab active" data-tab="overview" role="tab" aria-selected="true">Обзор договоров</button>
+        <button class="tab" data-tab="questions" role="tab">4 вопроса</button>
+        <button class="tab" data-tab="sources" role="tab">Первоисточники</button>
+        <button class="tab" data-tab="diagnostics" role="tab">Диагностика</button>
+      </div>
+      <section id="overview" class="tab-content active">
+        <div class="panel-heading"><div><h2>Действующие условия</h2><p>По состоянию на <b id="asOfLabel">—</b>. Документы без подтверждённого статуса не меняют условия.</p></div><div class="search-wrap"><span>⌕</span><input id="filterInput" type="search" placeholder="Поиск по номеру или поставщику" aria-label="Поиск договоров"></div></div>
+        <div class="table-scroll"><table><thead><tr><th>Договор</th><th>Поставщик</th><th>Сумма договора</th><th>Срок поставки</th><th>Статус</th><th></th></tr></thead><tbody id="contractsTable"></tbody></table></div>
+        <div class="detail-heading"><div><span class="section-overline">ДОКУМЕНТАЛЬНОЕ ОСНОВАНИЕ</span><h2 id="selectedContractHeading">—</h2></div><span class="hint">Нажмите «К источнику», чтобы открыть точный абзац</span></div>
+        <div id="contractDetails"></div>
+      </section>
+      <section id="questions" class="tab-content"><div class="panel-heading"><div><h2>Ответы на вопросы закупщика</h2><p>Ответы рассчитаны на основании загруженных TXT. Ниже — ссылки на цитаты.</p></div></div><div id="answers"></div></section>
+      <section id="sources" class="tab-content">
+        <div class="panel-heading"><div><h2>Исходный текст</h2><p>Оригинальные абзацы показаны без изменения формулировок.</p></div><label class="source-select-label">Документ <select id="sourceSelect" aria-label="Выбор источника"></select></label></div>
+        <div id="sourceMeta" class="source-meta"></div>
+        <div id="sourceParagraphs" class="source-paragraphs"></div>
+      </section>
+      <section id="diagnostics" class="tab-content"><div class="panel-heading"><div><h2>Диагностика и ограничения</h2><p>Что удалось прочитать, а что требует внимания специалиста.</p></div></div><div id="diagnosticsItems"></div></section>
+      <footer class="footer">Демонстрационный продукт · Ненадёжные и конфликтующие условия требуют ручной проверки · Обработка в локальном процессе</footer>
+    </div>
+  </main>
+</div>
+</body>
+</html>
