@@ -1,0 +1,1 @@
+"""Semantic TextNavigator: conservative, explainable contract conditions extraction."""
