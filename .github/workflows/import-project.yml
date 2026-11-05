@@ -1,0 +1,31 @@
+name: Import Semantic TextNavigator source
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'project-bundle.tar.xz'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Unpack complete source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f project-bundle.tar.xz
+          tar -xJf project-bundle.tar.xz --strip-components=1
+          rm project-bundle.tar.xz
+          python3 -m unittest discover -s tests -v
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "feat: import complete Semantic TextNavigator application"
+            git push
+          fi
