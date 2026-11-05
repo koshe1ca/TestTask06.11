@@ -91,7 +91,8 @@ MONTHS = {'января': 1, 'февраля': 2, 'марта': 3, 'апреля
           'ноября': 11, 'декабря': 12}
 WORDS_DATE_RE = re.compile(r'(?<!\d)(\d{1,2})\s+(' + '|'.join(MONTHS) + r')\s+(20\d{2})(?:\s*года|\s*г\.)?', re.I)
 MONEY_RE = re.compile(
-    r'(?<![\w\d])((?:\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d+)(?:[,.]\d{1,2})?)\s*(?:₽|руб(?:\.|лей|ля|ль)?\b|RUB\b)', re.I
+    r'(?<![\w\d])((?:\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d+)(?:[,.]\d{1,2})?)'
+    r'(?:\s*\([^()\n]{3,180}\))?\s*(?:₽|руб(?:\.|лей|ля|ль)?\b|RUB\b)', re.I
 )
 SUPPLIER_RE = re.compile(r'(?:поставщик|исполнитель|продавец)\s*[:—–-]\s*([^;\n]+)', re.I)
 AMOUNT_HINT = re.compile(r'сумм\w*|цен[ауы]|стоимост\w*|стоимостью|общая\s+сумма', re.I)
@@ -211,29 +212,39 @@ def extract_supplier(source_id: str, filename: str, paragraphs: list[str]) -> tu
 
 
 def extract_money(source_id: str, filename: str, paragraphs: list[str]) -> tuple[Condition | None, list[str]]:
+    """Extract contract price from individual clauses; never treat advance or budget as price.
+
+    A blank-line paragraph can contain several numbered clauses, so the search
+    must inspect each *line* independently while retaining paragraph evidence.
+    """
     candidates: list[Condition] = []
     issues: list[str] = []
     for ix, para in enumerate(paragraphs):
-        if not AMOUNT_HINT.search(para) or BAD_MONEY_CONTEXT.search(para):
-            continue
-        matches = list(MONEY_RE.finditer(para))
-        if not matches:
-            continue
-        try:
-            parsed = [(Decimal(m[1].replace(' ', '').replace('\u00a0', '').replace('\u202f', '').replace(',', '.')), m) for m in matches]
-        except InvalidOperation:
-            continue
-        if len(parsed) > 1 and len({p[0] for p in parsed}) > 1:
-            if re.search(r'\b(?:с|со)\b.{0,40}\b(?:на|до)\b|новая\s+сумма|изменить\s+сумму\s+на', para, re.I):
-                value = parsed[-1][0]
-            elif re.search(r'(?:в\s+том\s+числе|в\s+т\.?\s*ч\.?|ндс)', para, re.I):
-                value = parsed[0][0]
-            else:
-                issues.append(f'Неоднозначные суммы в абзаце {ix+1} файла «{filename}».')
+        for line in para.splitlines():
+            if not AMOUNT_HINT.search(line) or BAD_MONEY_CONTEXT.search(line):
                 continue
-        else:
-            value = parsed[0][0]
-        candidates.append(Condition(value, ev(source_id, filename, ix, para)))
+            # A procurement limit is NOT a contract price. In the attached STN-103,
+            # the actual price is exclusively in a missing specification.
+            if re.search(r'\b(?:лимит|бюджет|предельн\w*\s+расход|планов\w*\s+сумм)\b', line, re.I):
+                continue
+            matches = list(MONEY_RE.finditer(line))
+            if not matches:
+                continue
+            try:
+                parsed = [(Decimal(m[1].replace(' ', '').replace('\u00a0', '').replace('\u202f', '').replace(',', '.')), m) for m in matches]
+            except InvalidOperation:
+                continue
+            if len(parsed) > 1 and len({p[0] for p in parsed}) > 1:
+                if re.search(r'\b(?:с|со)\b.{0,40}\b(?:на|до)\b|новая\s+сумма|изменить\s+сумму\s+на', line, re.I):
+                    value = parsed[-1][0]
+                elif re.search(r'(?:в\s+том\s+числе|в\s+т\.?\s*ч\.?|ндс)', line, re.I):
+                    value = parsed[0][0]
+                else:
+                    issues.append(f'Неоднозначные суммы в абзаце {ix+1} файла «{filename}».')
+                    continue
+            else:
+                value = parsed[0][0]
+            candidates.append(Condition(value, ev(source_id, filename, ix, para)))
     if not candidates:
         return None, issues
     if len({c.value for c in candidates}) > 1:
@@ -243,26 +254,30 @@ def extract_money(source_id: str, filename: str, paragraphs: list[str]) -> tuple
 
 
 def extract_deadline(source_id: str, filename: str, paragraphs: list[str]) -> tuple[Condition | None, list[str]]:
+    """Only consider dates in actual delivery clauses, not payment or acceptance."""
     candidates: list[Condition] = []
     issues: list[str] = []
     for ix, para in enumerate(paragraphs):
-        if not DEADLINE_HINT.search(para) or not DEADLINE_CONTEXT.search(para):
-            continue
-        possible = dates_in(para)
-        if not possible:
-            if re.search(r'в\s+течение\s+\d+|после\s+получени', para, re.I):
-                issues.append(f'Относительный срок поставки в абзаце {ix+1} файла «{filename}»: нужна проверка.')
-            continue
-        unique = {d for d, _, _ in possible}
-        if len(unique) == 1:
-            value = possible[0][0]
-        elif re.search(r'(?:срок|дат\w*)\s+поставк\w*.{0,45}\b(?:с|со)\b.{0,45}\bна\b|изменить\s+срок.*\bна\b', para, re.I):
-            value = possible[-1][0]
-        else:
-            # Dates for signature or agreement effectiveness MUST NOT become delivery dates.
-            issues.append(f'Несколько возможных дат в абзаце {ix+1} файла «{filename}»: нужна проверка срока.')
-            continue
-        candidates.append(Condition(value, ev(source_id, filename, ix, para)))
+        for line in para.splitlines():
+            if not DEADLINE_HINT.search(line) or not DEADLINE_CONTEXT.search(line):
+                continue
+            if re.search(r'сроком\s+оплаты|срок\s+оплат\w*|срок\s+платеж\w*|'
+                         r'оплат\w*\s+оставш\w*\s+сумм\w*|\bне\s+поставк\w*', line, re.I):
+                continue
+            possible = dates_in(line)
+            if not possible:
+                if re.search(r'в\s+течение\s+\d+|после\s+получени', line, re.I):
+                    issues.append(f'Относительный срок поставки в абзаце {ix+1} файла «{filename}»: нужна проверка.')
+                continue
+            unique = {d for d, _, _ in possible}
+            if len(unique) == 1:
+                value = possible[0][0]
+            elif re.search(r'(?:срок|дат\w*)\s+поставк\w*.{0,45}\b(?:с|со)\b.{0,45}\bна\b|изменить\s+срок.*\bна\b', line, re.I):
+                value = possible[-1][0]
+            else:
+                issues.append(f'Несколько возможных дат в абзаце {ix+1} файла «{filename}»: нужна проверка срока.')
+                continue
+            candidates.append(Condition(value, ev(source_id, filename, ix, para)))
     if not candidates:
         return None, issues
     if len({c.value for c in candidates}) > 1:

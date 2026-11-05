@@ -65,7 +65,7 @@ async function loadDemo() {
     const res = await fetch('/api/demo');
     if (!res.ok) throw new Error('Не удалось загрузить демонстрационные документы.');
     state.files=(await res.json()).files;
-    state.mode='Демо · вымышленные данные';
+    state.mode='Исходные учебные документы';
     state.chosen=null;state.sourceId=null;
     $('fileInput').value='';
     renderFiles();
