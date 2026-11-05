@@ -137,8 +137,8 @@ function renderTable() {
   ).join('') : '<tr><td colspan="6" class="muted">Нет договоров по запросу или основные договоры не распознаны.</td></tr>';
 }
 
-function conditionCard(label, condition, valueClass, extra='') {
-  return `<div class="field-card"><span class="field-name">${h(label)}</span><div class="field-value ${valueClass||''}">${h(value(condition))}</div>${extra}${evidenceCard(condition?.evidence)}</div>`;
+function conditionCard(label, condition, valueClass, extra='', fallbackEvidence=null) {
+  return `<div class="field-card"><span class="field-name">${h(label)}</span><div class="field-value ${valueClass||''}">${h(value(condition))}</div>${extra}${evidenceCard(condition?.evidence || fallbackEvidence)}</div>`;
 }
 
 function renderDetails() {
@@ -153,7 +153,7 @@ function renderDetails() {
   ).join('')}</div>` : '';
   $('contractDetails').innerHTML=`<div class="detail-grid">
     <div class="field-card wide"><span class="field-name">Поставщик</span><div class="field-value supplier-value">${h(c.supplier)}</div>${evidenceCard(c.supplier_evidence)}</div>
-    ${conditionCard('Сумма договора',c.amount,'')}
+    ${conditionCard('Сумма договора',c.amount,'','',c.missing_amount_evidence)}
     ${conditionCard('Срок поставки',c.deadline,'')}
   </div>${applied}${notices}${alerts(c.issues)}`;
 }

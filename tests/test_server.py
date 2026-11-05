@@ -53,6 +53,7 @@ class ApiTests(unittest.TestCase):
         self.assertNotIn('STN-101 — 30.04.2026', result['answers'][3]['text'])
         self.assertIn('STN-103 — нет данных', result['answers'][2]['text'])
         self.assertEqual(result['answers'][2]['evidence'][0]['filename'], '04_contract.txt')
+        self.assertEqual(by_id['STN-103']['missing_amount_evidence']['filename'], '04_contract.txt')
 
     def test_api_reacts_to_modified_contract_data(self):
         demo = self.request('/api/demo')['files']

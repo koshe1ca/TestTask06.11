@@ -9,7 +9,7 @@ from pathlib import Path
 import sys
 import webbrowser
 
-from textnavigator.engine import analyse, date_text, money_text
+from textnavigator.engine import analyse, date_text, money_text, Evidence
 from textnavigator.qa import preset_answers
 
 ROOT = Path(__file__).resolve().parent
@@ -35,6 +35,18 @@ def condition_json(condition, field):
             'evidence': evidence_json(condition.evidence)}
 
 
+def missing_amount_evidence(contract):
+    """Give the source of an explicitly missing contract price where available."""
+    if contract.amount is not None:
+        return None
+    for source in contract.base_sources:
+        for index, paragraph in enumerate(source.paragraphs, start=1):
+            lower = paragraph.lower()
+            if 'стоимост' in lower and ('спецификац' in lower or 'не указано' in lower):
+                return evidence_json(Evidence(source.source_id, source.filename, index, paragraph))
+    return None
+
+
 def result_json(analysis):
     return {
         'as_of': date_text(analysis.as_of),
@@ -49,6 +61,7 @@ def result_json(analysis):
             {'id': c.contract_id, 'supplier': c.supplier or 'нет данных',
              'supplier_evidence': evidence_json(c.supplier_evidence),
              'amount': condition_json(c.amount, 'amount'),
+             'missing_amount_evidence': missing_amount_evidence(c),
              'deadline': condition_json(c.deadline, 'deadline'),
              'base_filenames': [s.filename for s in c.base_sources],
              'applied': [{'filename': s.filename, 'effective_date': date_text(s.effective_date)} for s in c.applied_amendments],
